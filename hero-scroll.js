@@ -1,29 +1,57 @@
 (function() {
   'use strict';
+
+  // === Title fix — runs immediately, before DOMContentLoaded ===
+  try {
+    var SITE_NAME = 'Armando Vanegas';
+    var t = document.title || '';
+    var sep = ' - ';
+    if (t.indexOf(SITE_NAME) !== -1) {
+      var parts = t.split(sep);
+      // current format: "Page - Site"  →  flip to "Site - Page"
+      if (parts.length >= 2) {
+        var siteIdx = -1;
+        for (var pi = 0; pi < parts.length; pi++) {
+          if (parts[pi].trim() === SITE_NAME) { siteIdx = pi; break; }
+        }
+        if (siteIdx > 0) {
+          var pageParts = parts.slice(0, siteIdx).concat(parts.slice(siteIdx + 1));
+          var pageTitle = pageParts.join(sep).trim();
+          // Strip leading "VBC " if present (old branding)
+          if (pageTitle.indexOf('VBC ') === 0) pageTitle = pageTitle.slice(4);
+          document.title = SITE_NAME + sep + pageTitle;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // === Hero scroll animation ===
   var TOTAL_FRAMES = 145;
   var FRAME_W = 1920, FRAME_H = 1080;
   var ASPECT = FRAME_W / FRAME_H;
   var FRAMES_BASE = "https://armandovanegas.github.io/vbc-public-assets/frames";
 
-  var MAX_LOADED_FRAMES = 8;
+  var MAX_LOADED_FRAMES = 16;
   var IDLE_LOOP_FRAMES = 12;
   var IDLE_BASE_INTERVAL = 85;
   var IDLE_FRAME_HOLD = { 0: 240, 6: 210 };
+  var SCROLL_QUIET_MS = 250;
 
   var section = document.getElementById('vbc-hero-section');
   var wrapper = document.getElementById('vbc-canvas-wrapper');
   var canvas = document.getElementById('vbc-frame-canvas');
-  if (!section || !wrapper || !canvas) return;
+  if (!section) return;
+  if (!wrapper) return;
+  if (!canvas) return;
   var ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) return;
 
   var frames = {};
   var loading = {};
-  var currentFrame = -1, rafPending = false;
+  var currentFrame = -1;
+  var rafPending = false;
   var physW = 0, physH = 0;
-  var idleTimeout = null;
   var idleFrame = 0;
-  var scrollIsActive = false;
   var lastScrollAt = 0;
   var firstFrameRendered = false;
 
@@ -115,7 +143,6 @@
     }
     loadFrame(i).then(function(img) {
       if (!img) return;
-      if (currentFrame !== i) return;
       if (andDraw) drawFrame(i);
     });
   }
@@ -139,7 +166,7 @@
     }
   }
 
-  function scheduleFrame(i) {
+  function scheduleScrollFrame(i) {
     if (i === currentFrame) return;
     currentFrame = i;
     if (rafPending) return;
@@ -157,19 +184,24 @@
     });
   }
 
+  function isAtTop() {
+    var rect = section.getBoundingClientRect();
+    var scrolled = Math.max(0, -rect.top);
+    return scrolled < 50;
+  }
+
+  // Continuous idle loop — never stops, just gates whether to draw
   function tickIdle() {
-    ensureFrame(idleFrame, true);
+    var quiet = Date.now() - lastScrollAt > SCROLL_QUIET_MS;
+    if (isAtTop()) {
+      if (quiet) {
+        ensureFrame(idleFrame, true);
+        currentFrame = idleFrame;
+      }
+    }
     var hold = IDLE_FRAME_HOLD[idleFrame] || IDLE_BASE_INTERVAL;
     idleFrame = (idleFrame + 1) % IDLE_LOOP_FRAMES;
-    idleTimeout = setTimeout(tickIdle, hold);
-  }
-  function startIdleLoop() {
-    stopIdleLoop();
-    idleFrame = 0;
-    tickIdle();
-  }
-  function stopIdleLoop() {
-    if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
+    setTimeout(tickIdle, hold);
   }
 
   function onScroll() {
@@ -179,25 +211,10 @@
     var progress = total > 0 ? Math.min(scrolled / total, 1) : 0;
     var idx = Math.min(Math.floor(progress * TOTAL_FRAMES), TOTAL_FRAMES - 1);
     lastScrollAt = Date.now();
-    if (!scrollIsActive) {
-      scrollIsActive = true;
-      stopIdleLoop();
+    if (!isAtTop()) {
+      scheduleScrollFrame(idx);
+      preloadWindow(idx);
     }
-    scheduleFrame(idx);
-    preloadWindow(idx);
-  }
-
-  function watchScrollStop() {
-    setInterval(function() {
-      if (!scrollIsActive) return;
-      if (Date.now() - lastScrollAt <= 1500) return;
-      scrollIsActive = false;
-      var rect = section.getBoundingClientRect();
-      var total = section.offsetHeight - window.innerHeight;
-      var scrolled = Math.max(0, -rect.top);
-      var progress = total > 0 ? scrolled / total : 0;
-      if (progress < 0.05) startIdleLoop();
-    }, 600);
   }
 
   function init() {
@@ -208,12 +225,13 @@
     });
 
     loadFrame(0).then(function() {
-      scheduleFrame(0);
+      // Draw frame 0 immediately
+      currentFrame = 0;
+      drawFrame(0);
+      // Preload idle loop frames (1-11)
       for (var k = 1; k < IDLE_LOOP_FRAMES; k++) loadFrame(k);
       window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
-      watchScrollStop();
-      startIdleLoop();
+      tickIdle();
     });
   }
 
