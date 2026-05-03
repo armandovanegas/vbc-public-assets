@@ -43,6 +43,11 @@
   if (!section) return;
   if (!wrapper) return;
   if (!canvas) return;
+
+  // Animation completes over the first ~2.5 viewports of scroll.
+  // After that, animation stays at last frame (face still visible as bg).
+  function getBudget() { return Math.max(800, window.innerHeight * 2.5); }
+  function getScrollY() { return window.pageYOffset || document.documentElement.scrollTop || 0; }
   var ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) return;
 
@@ -185,9 +190,7 @@
   }
 
   function isAtTop() {
-    var rect = section.getBoundingClientRect();
-    var scrolled = Math.max(0, -rect.top);
-    return scrolled < 50;
+    return getScrollY() < 60;
   }
 
   // Continuous idle loop — never stops, just gates whether to draw
@@ -205,10 +208,9 @@
   }
 
   function onScroll() {
-    var rect = section.getBoundingClientRect();
-    var total = section.offsetHeight - window.innerHeight;
-    var scrolled = Math.max(0, -rect.top);
-    var progress = total > 0 ? Math.min(scrolled / total, 1) : 0;
+    var budget = getBudget();
+    var scrolled = getScrollY();
+    var progress = budget > 0 ? Math.min(scrolled / budget, 1) : 0;
     var idx = Math.min(Math.floor(progress * TOTAL_FRAMES), TOTAL_FRAMES - 1);
     lastScrollAt = Date.now();
     if (!isAtTop()) {
