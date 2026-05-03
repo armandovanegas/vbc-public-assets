@@ -240,4 +240,32 @@
   } else {
     init();
   }
+
+  // === Video click-to-play ===
+  function initVideo() {
+    var box = document.getElementById('vbc-home-video');
+    var vid = document.getElementById('vbc-home-video-el');
+    if (!box) return;
+    if (!vid) return;
+    function play() {
+      try {
+        vid.controls = true;
+        vid.play();
+        box.classList.add('playing');
+      } catch (e) {}
+    }
+    box.addEventListener('click', function(e) {
+      if (box.classList.contains('playing')) return;
+      e.preventDefault();
+      play();
+    });
+    box.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(); }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initVideo);
+  } else {
+    initVideo();
+  }
 })();
