@@ -1,0 +1,140 @@
+export const categories = [
+  { id: 'all', label: 'Todos' },
+  { id: 'dev', label: 'Desarrollo' },
+  { id: 'design', label: 'Diseño' },
+  { id: 'business', label: 'Negocios' },
+  { id: 'marketing', label: 'Marketing' },
+];
+
+export const courses = [
+  {
+    id: 'rn-101',
+    title: 'React Native desde cero',
+    category: 'dev',
+    instructor: 'Armando Vanegas',
+    level: 'Principiante',
+    durationHours: 8,
+    rating: 4.8,
+    students: 1284,
+    price: 49,
+    cover: '#6366F1',
+    summary:
+      'Aprende a construir aplicaciones móviles para iOS y Android con React Native y Expo.',
+    lessons: [
+      { id: 'l1', title: 'Introducción a React Native', durationMin: 12 },
+      { id: 'l2', title: 'Configurando Expo', durationMin: 18 },
+      { id: 'l3', title: 'Tu primera pantalla', durationMin: 22 },
+      { id: 'l4', title: 'Navegación entre pantallas', durationMin: 28 },
+      { id: 'l5', title: 'Estado y props', durationMin: 24 },
+      { id: 'l6', title: 'Consumiendo APIs', durationMin: 30 },
+      { id: 'l7', title: 'Publicando tu app', durationMin: 26 },
+    ],
+  },
+  {
+    id: 'ui-200',
+    title: 'Diseño UI moderno',
+    category: 'design',
+    instructor: 'Lucía Ramírez',
+    level: 'Intermedio',
+    durationHours: 6,
+    rating: 4.7,
+    students: 932,
+    price: 39,
+    cover: '#F59E0B',
+    summary:
+      'Domina los fundamentos del diseño de interfaces limpias, accesibles y atractivas.',
+    lessons: [
+      { id: 'l1', title: 'Principios de diseño visual', durationMin: 15 },
+      { id: 'l2', title: 'Tipografía y jerarquía', durationMin: 20 },
+      { id: 'l3', title: 'Color y contraste', durationMin: 18 },
+      { id: 'l4', title: 'Layout y espaciado', durationMin: 22 },
+      { id: 'l5', title: 'Componentes reutilizables', durationMin: 25 },
+    ],
+  },
+  {
+    id: 'biz-101',
+    title: 'Funda tu startup',
+    category: 'business',
+    instructor: 'Carlos Méndez',
+    level: 'Principiante',
+    durationHours: 5,
+    rating: 4.6,
+    students: 612,
+    price: 29,
+    cover: '#10B981',
+    summary:
+      'Desde la idea hasta el primer cliente: validación, MVP y crecimiento temprano.',
+    lessons: [
+      { id: 'l1', title: 'Validar tu idea', durationMin: 14 },
+      { id: 'l2', title: 'Construir un MVP', durationMin: 20 },
+      { id: 'l3', title: 'Primeros usuarios', durationMin: 18 },
+      { id: 'l4', title: 'Modelos de negocio', durationMin: 22 },
+    ],
+  },
+  {
+    id: 'mkt-150',
+    title: 'Growth Marketing práctico',
+    category: 'marketing',
+    instructor: 'Ana Torres',
+    level: 'Intermedio',
+    durationHours: 7,
+    rating: 4.9,
+    students: 1502,
+    price: 45,
+    cover: '#EC4899',
+    summary:
+      'Tácticas reales para hacer crecer un producto digital con presupuesto limitado.',
+    lessons: [
+      { id: 'l1', title: 'El embudo de crecimiento', durationMin: 16 },
+      { id: 'l2', title: 'Adquisición orgánica', durationMin: 24 },
+      { id: 'l3', title: 'Activación y onboarding', durationMin: 22 },
+      { id: 'l4', title: 'Retención por email', durationMin: 26 },
+      { id: 'l5', title: 'Referidos y viralidad', durationMin: 20 },
+    ],
+  },
+  {
+    id: 'ts-300',
+    title: 'TypeScript avanzado',
+    category: 'dev',
+    instructor: 'Diego Salazar',
+    level: 'Avanzado',
+    durationHours: 9,
+    rating: 4.8,
+    students: 845,
+    price: 59,
+    cover: '#3B82F6',
+    summary:
+      'Tipos genéricos, condicionales, mapeados y patrones del mundo real con TypeScript.',
+    lessons: [
+      { id: 'l1', title: 'Repaso del sistema de tipos', durationMin: 18 },
+      { id: 'l2', title: 'Genéricos en profundidad', durationMin: 28 },
+      { id: 'l3', title: 'Tipos condicionales', durationMin: 30 },
+      { id: 'l4', title: 'Tipos mapeados', durationMin: 26 },
+      { id: 'l5', title: 'Patrones reales', durationMin: 32 },
+    ],
+  },
+  {
+    id: 'fig-110',
+    title: 'Figma para producto',
+    category: 'design',
+    instructor: 'Marta Ríos',
+    level: 'Principiante',
+    durationHours: 4,
+    rating: 4.5,
+    students: 478,
+    price: 25,
+    cover: '#8B5CF6',
+    summary:
+      'Aprende Figma desde cero enfocado en flujos de producto y prototipado.',
+    lessons: [
+      { id: 'l1', title: 'Tour por Figma', durationMin: 14 },
+      { id: 'l2', title: 'Frames y autolayout', durationMin: 22 },
+      { id: 'l3', title: 'Componentes y variantes', durationMin: 24 },
+      { id: 'l4', title: 'Prototipado', durationMin: 18 },
+    ],
+  },
+];
+
+export function getCourseById(id) {
+  return courses.find((c) => c.id === id);
+}
