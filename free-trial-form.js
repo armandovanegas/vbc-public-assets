@@ -9,12 +9,12 @@
     es: {
       name: 'Falta tu nombre', business: 'Falta el nombre del negocio', email: 'Falta tu correo',
       emailBad: 'Correo no válido', phone: 'Falta tu teléfono', industry: 'Elige una industria',
-      language: 'Elige un idioma', sending: 'Enviando...'
+      language: 'Elige un idioma', consent: 'Debes autorizar el contacto para continuar', sending: 'Enviando...'
     },
     en: {
       name: 'Your name is required', business: 'Business name is required', email: 'Your email is required',
       emailBad: 'Invalid email', phone: 'Your phone is required', industry: 'Choose an industry',
-      language: 'Choose a language', sending: 'Sending...'
+      language: 'Choose a language', consent: 'You must authorize contact to continue', sending: 'Sending...'
     }
   }[LANG];
 
@@ -45,6 +45,8 @@
       if (!phone || phone.length < 7) return T.phone;
       if (!industry) return T.industry;
       if (!language) return T.language;
+      var consentEl = $('ft-consent');
+      if (consentEl && !consentEl.checked) return T.consent;
       return null;
     }
 
@@ -57,6 +59,7 @@
         industry: $('ft-industry').value,
         language: $('ft-language').value,
         message: $('ft-message').value.trim(),
+        consent: ($('ft-consent') && $('ft-consent').checked) ? 'true' : 'false',
         source: 'vbc-free-trial',
         page_lang: LANG,
         submitted_at: new Date().toISOString(),
@@ -74,7 +77,7 @@
     }
 
     function submitToServer(data) {
-      var url = 'https://armandovanegas.com/wp-json/contact-form-7/v1/contact-forms/0/feedback';
+      var url = 'https://armandovanegas.app.n8n.cloud/webhook/wf-trial-intake';
       return fetch(url, {
         method: 'POST',
         mode: 'cors',
