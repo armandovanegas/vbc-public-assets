@@ -128,20 +128,12 @@
       submitBtn.textContent = T.sending;
       var data = gather();
       persistLocal(data);
-      submitToServer(data).then(function() {
-        showSuccess();
-        try { console.log('VBC new contact captured', data); } catch (e) {}
-        // Open mailto in new tab as backup so Armando also gets it directly
-        try {
-          var mailto = document.createElement('a');
-          mailto.href = 'mailto:armando@armandovanegas.com?subject=' + encodeURIComponent('VBC New Contact: ' + data.name) + '&body=' + encodeURIComponent(JSON.stringify(data, null, 2));
-          mailto.target = '_blank';
-          mailto.rel = 'noopener';
-          mailto.style.display = 'none';
-          document.body.appendChild(mailto);
-          // Don't auto-click — that opens email client. Just queue it.
-        } catch (e) {}
-      });
+      // Optimistic UX: the backend POST is fire-and-forget (we don't gate on its
+      // response), and the lead is already in localStorage. Show success immediately
+      // so the visitor never sees a dead 3s gap while the webhook runs.
+      showSuccess();
+      try { console.log('VBC new contact captured', data); } catch (e) {}
+      submitToServer(data);
     });
   }
 
