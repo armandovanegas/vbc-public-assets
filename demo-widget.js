@@ -4,7 +4,7 @@
 
    MONTAJE (una sola vez, dentro del HTML widget del popup 2655):
      <div id="vbc-demo"></div>
-     <script src="https://armandovanegas.github.io/vbc-public-assets/demo-widget.js?v=2"></script>
+     <script src="https://armandovanegas.github.io/vbc-public-assets/demo-widget.js?v=3"></script>
 
    Para futuros cambios: editar este archivo → git push → subir el ?v=N. Sin tocar Elementor.
 
@@ -229,17 +229,31 @@
       .catch(function () { fail(root, "generr"); });
   }
 
+  function micErr(e) {
+    var s = ("" + (e && ((e.name || "") + " " + (e.message || "")) || e)).toLowerCase();
+    return /permission|denied|notallowed|notfound|notreadable|microphone|getusermedia|audio|mic/.test(s);
+  }
+
   function startVoice(root, conversationToken) {
-    import("https://esm.sh/@elevenlabs/client@1.12.1").then(function (mod) {
-      return mod.Conversation.startSession({
-        conversationToken: conversationToken, connectionType: "webrtc",
-        onConnect: function () { show(root, "live"); startTimer(root); },
-        onDisconnect: function () { stopTimer(); show(root, "cta"); },
-        onError: function () { stopTimer(); fail(root, "generr"); }
-      });
-    }).then(function (c) { conv = c; }).catch(function (e) {
-      var denied = ("" + e).toLowerCase().match(/permission|denied|notallowed|microphone|getusermedia/);
-      fail(root, denied ? "micdenied" : "generr");
+    // 1) Pedir el micrófono EXPLÍCITAMENTE primero: garantiza un prompt claro y permite
+    //    distinguir la negación del micrófono de otros fallos (antes todo caía en "generr").
+    var reqMic = (navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+      ? navigator.mediaDevices.getUserMedia({ audio: true })
+      : Promise.reject(new Error("getUserMedia unsupported"));
+    reqMic.then(function (stream) {
+      try { stream.getTracks().forEach(function (tr) { tr.stop(); }); } catch (e) {}  // permiso concedido; el SDK abrirá su propio track
+      // 2) Cargar el SDK e iniciar la sesión de voz (el permiso ya está concedido, sin segundo prompt).
+      return import("https://esm.sh/@elevenlabs/client@1.12.1").then(function (mod) {
+        return mod.Conversation.startSession({
+          conversationToken: conversationToken, connectionType: "webrtc",
+          onConnect: function () { show(root, "live"); startTimer(root); },
+          onDisconnect: function () { stopTimer(); show(root, "cta"); },
+          onError: function (e) { stopTimer(); console.error("[VBC demo] EL onError:", e); fail(root, micErr(e) ? "micdenied" : "generr"); }
+        });
+      }).then(function (c) { conv = c; });
+    }).catch(function (e) {
+      console.error("[VBC demo] startVoice error:", e);
+      fail(root, micErr(e) ? "micdenied" : "generr");
     });
   }
 
