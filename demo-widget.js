@@ -4,7 +4,7 @@
 
    MONTAJE (una sola vez, dentro del HTML widget del popup 2655):
      <div id="vbc-demo"></div>
-     <script src="https://armandovanegas.github.io/vbc-public-assets/demo-widget.js?v=3"></script>
+     <script src="https://armandovanegas.github.io/vbc-public-assets/demo-widget.js?v=4"></script>
 
    Para futuros cambios: editar este archivo → git push → subir el ?v=N. Sin tocar Elementor.
 
@@ -51,7 +51,9 @@
       cta_title: "Eso fue solo una prueba", cta_sub: "Imagina a Sara atendiendo a todos tus clientes. Agenda tu llamada y activamos tu prueba gratis.", book: "Agendar mi llamada",
       limit_title: "Ya probaste el demo", book2: "Agendar mi llamada",
       retry: "Reintentar", or_book: "o agenda tu llamada",
-      micdenied: "Para probar a Sara necesitas permitir tu micrófono — es lo que le da voz. Actívalo y reintenta, o agenda una llamada y la escuchas en vivo.",
+      micdenied: "Para probar a Sara necesitas permitir tu micrófono — es lo que le da voz. Toca el candado de la barra de direcciones → Micrófono → Permitir, y reintenta. O agenda una llamada y la escuchas en vivo.",
+      micnone: "No detectamos un micrófono en este dispositivo. Conecta uno (o prueba desde tu teléfono) y reintenta — o agenda una llamada y escuchas a Sara en vivo.",
+      micbusy: "Tu micrófono está ocupado por otra app (Zoom, Meet, Teams…). Ciérrala y reintenta — o agenda una llamada y escuchas a Sara en vivo.",
       captcha: "No pudimos verificar que eres una persona. Recarga la página e inténtalo de nuevo.",
       generr: "Algo falló al conectar. Reintenta en un momento." },
     en: { title: "Talk to Sara", sub: "Our AI voice agent. Try her right now.",
@@ -62,7 +64,9 @@
       cta_title: "That was just a taste", cta_sub: "Imagine Sara handling every customer you have. Book your call and we activate your free trial.", book: "Book my call",
       limit_title: "You already tried the demo",
       retry: "Retry", or_book: "or book your call",
-      micdenied: "To try Sara you need to allow your microphone — that's what gives her voice. Enable it and retry, or book a call to hear her live.",
+      micdenied: "To try Sara you need to allow your microphone — that's what gives her voice. Click the lock in the address bar → Microphone → Allow, and retry. Or book a call to hear her live.",
+      micnone: "We couldn't find a microphone on this device. Connect one (or try from your phone) and retry — or book a call to hear Sara live.",
+      micbusy: "Your microphone is in use by another app (Zoom, Meet, Teams…). Close it and retry — or book a call to hear Sara live.",
       captcha: "We couldn't verify you're human. Please reload the page and try again.",
       generr: "Something went wrong connecting. Please retry in a moment." }
   };
@@ -233,6 +237,16 @@
     var s = ("" + (e && ((e.name || "") + " " + (e.message || "")) || e)).toLowerCase();
     return /permission|denied|notallowed|notfound|notreadable|microphone|getusermedia|audio|mic/.test(s);
   }
+  // Elige el mensaje exacto según el tipo de fallo de micrófono (ayuda al usuario Y diagnostica la causa).
+  function failMic(root, e) {
+    console.error("[VBC demo] mic/voice error:", e && e.name, e && e.message, e);
+    if (!micErr(e)) return fail(root, "generr");
+    var n = (e && e.name) || "";
+    var key = (n === "NotFoundError" || n === "DevicesNotFoundError" || n === "OverconstrainedError") ? "micnone"
+            : (n === "NotReadableError" || n === "TrackStartError" || n === "AbortError") ? "micbusy"
+            : "micdenied";
+    bind(root, "errMsg", t[key] || t.micdenied); show(root, "error");
+  }
 
   function startVoice(root, conversationToken) {
     // 1) Pedir el micrófono EXPLÍCITAMENTE primero: garantiza un prompt claro y permite
@@ -248,12 +262,11 @@
           conversationToken: conversationToken, connectionType: "webrtc",
           onConnect: function () { show(root, "live"); startTimer(root); },
           onDisconnect: function () { stopTimer(); show(root, "cta"); },
-          onError: function (e) { stopTimer(); console.error("[VBC demo] EL onError:", e); fail(root, micErr(e) ? "micdenied" : "generr"); }
+          onError: function (e) { stopTimer(); failMic(root, e); }
         });
       }).then(function (c) { conv = c; });
     }).catch(function (e) {
-      console.error("[VBC demo] startVoice error:", e);
-      fail(root, micErr(e) ? "micdenied" : "generr");
+      failMic(root, e);
     });
   }
 
