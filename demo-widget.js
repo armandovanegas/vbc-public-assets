@@ -4,15 +4,20 @@
 
    MONTAJE (una sola vez, dentro del HTML widget del popup 2655):
      <div id="vbc-demo"></div>
-     <script src="https://armandovanegas.github.io/vbc-public-assets/demo-widget.js?v=1"></script>
+     <script src="https://armandovanegas.github.io/vbc-public-assets/demo-widget.js?v=2"></script>
 
    Para futuros cambios: editar este archivo → git push → subir el ?v=N. Sin tocar Elementor.
+
+   ROBUSTEZ ANTI-ELEMENTOR (v2): Elementor CLONA el contenido del popup al abrirlo,
+   y un listener pegado al elemento original NO viaja al clon. Por eso aquí el clic
+   se delega en `document` (sobrevive a clonado/movimiento) y se resuelve la instancia
+   activa con closest('#vbc-demo'); un MutationObserver rellena cualquier instancia
+   nueva (clon) que Elementor inyecte. Soporta varias instancias #vbc-demo a la vez.
 
    - Voz en navegador vía @elevenlabs/client (WebRTC), token emitido por el gatekeeper.
    - Anti-abuso: Cloudflare Turnstile + límite IP 2/24h (en el gatekeeper n8n).
    - Idioma: detección multi-señal alineada al switcher propio (lang-switch.js):
        URL /en/ = inglés (autoritativo) · localStorage 'vbc_lang' · navigator.language · default EN.
-       NO se usa <html lang> (Elementor lo hornea a en-US en ambas versiones).
    Gatekeeper: https://armandovanegas.app.n8n.cloud/webhook/vbc-demo-gatekeeper
 ============================================================================ */
 (function () {
@@ -26,8 +31,6 @@
   var DEMO_SECONDS = 70, WRAP_AT = 56, HARD_STOP = 90;
 
   // --- idioma alineado al switcher propio del sitio (lang-switch.js) ---
-  //   ES canónico en "/", EN mirror en "/en/"; elección recordada en localStorage 'vbc_lang';
-  //   primera visita auto-detecta por navigator.language. NO confiamos en <html lang>.
   function detectLang() {
     var p = (location.pathname || "/").toLowerCase().replace(/\/+$/, "") || "/";
     if (p === "/en" || p.indexOf("/en/") === 0) return "en";   // mirror inglés = autoritativo
@@ -63,6 +66,8 @@
       captcha: "We couldn't verify you're human. Please reload the page and try again.",
       generr: "Something went wrong connecting. Please retry in a moment." }
   };
+  var LANG = detectLang();
+  var t = T[LANG];
 
   var CSS =
     '#vbc-demo{--vbc-accent:#19c39a;--vbc-ink:#0c1f1a;--vbc-glass:rgba(255,255,255,.14);' +
@@ -151,17 +156,15 @@
         '<button class="vbc-glass vbc-cta" data-act="retry" data-i18n="retry"></button>' +
         '<a class="vbc-link" data-act="book" href="#" data-i18n="or_book"></a>' +
       '</div>' +
-      '<div id="vbc-turnstile" class="vbc-ts"></div>' +
+      '<div class="vbc-turnstile vbc-ts"></div>' +
     '</div>';
 
   function injectCSS() {
     if (document.getElementById("vbc-demo-css")) return;
     var st = document.createElement("style");
-    st.id = "vbc-demo-css";
-    st.textContent = CSS;
+    st.id = "vbc-demo-css"; st.textContent = CSS;
     (document.head || document.documentElement).appendChild(st);
   }
-
   function loadTurnstile() {
     if (window.turnstile || document.getElementById("vbc-ts-api")) return;
     var s = document.createElement("script");
@@ -171,111 +174,124 @@
     (document.head || document.documentElement).appendChild(s);
   }
 
-  // --- monta y arranca el widget sobre el host #vbc-demo ---
-  function start(root) {
-    if (root.__vbcStarted) return;
-    root.__vbcStarted = true;
+  // --- helpers que operan sobre la instancia (root) que se le pase ---
+  function show(root, v) { root.querySelectorAll(".vbc-view").forEach(function (el) { el.hidden = el.dataset.view !== v; }); root.dataset.state = v; }
+  function bind(root, k, val) { root.querySelectorAll('[data-bind="' + k + '"]').forEach(function (el) { el.textContent = val; }); }
+  function fail(root, kind) { bind(root, "errMsg", t[kind] || t.generr); show(root, "error"); }
 
-    injectCSS();
-    loadTurnstile();
-    root.innerHTML = HTML;
-    root.dataset.state = "consent";
-
-    var lang = detectLang();
-    var t = T[lang];
-
-    var show = function (v) { root.querySelectorAll(".vbc-view").forEach(function (el) { el.hidden = el.dataset.view !== v; }); root.dataset.state = v; };
-    var bind = function (k, val) { root.querySelectorAll('[data-bind="' + k + '"]').forEach(function (el) { el.textContent = val; }); };
-
-    // i18n fill
+  function fillI18n(root) {
     root.querySelectorAll("[data-i18n]").forEach(function (el) { var k = el.dataset.i18n; if (t[k] != null) el.textContent = t[k]; });
-    root.querySelectorAll('[data-act="book"]').forEach(function (a) { if (a.tagName === "A") { a.href = BOOKING + "?lang=" + lang; if (!a.textContent.trim()) a.textContent = t.book; } });
-    root.querySelector('[data-view="cta"] [data-act="book"]').textContent = t.book;
-    root.querySelector('[data-view="limit"] [data-act="book"]').textContent = t.book;
-
-    var conv = null, tsWidgetId = null, timerInt = null, elapsed = 0, wrapSent = false;
-
-    function fail(kind) { bind("errMsg", t[kind] || t.generr); show("error"); }
-
-    function renderTurnstile(onToken) {
-      var mount = root.querySelector("#vbc-turnstile");
-      mount.innerHTML = "";
-      var go = function () {
-        tsWidgetId = window.turnstile.render(mount, {
-          sitekey: SITEKEY, callback: onToken,
-          "error-callback": function () { fail("captcha"); },
-          "expired-callback": function () { if (tsWidgetId != null) window.turnstile.reset(tsWidgetId); }
-        });
-      };
-      if (window.turnstile && window.turnstile.render) { go(); }
-      else { var iv = setInterval(function () { if (window.turnstile && window.turnstile.render) { clearInterval(iv); go(); } }, 120); }
-    }
-
-    function gatekeep(token) {
-      show("connecting");
-      fetch(GATEKEEPER, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ turnstileToken: token }) })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (!data || data.allowed !== true) {
-            if (data && data.reason === "limit") { bind("limitMsg", data.message || t.cta_sub); return show("limit"); }
-            return fail(data && data.reason === "captcha" ? "captcha" : "generr");
-          }
-          startVoice(data.token);
-        })
-        .catch(function () { fail("generr"); });
-    }
-
-    function startVoice(conversationToken) {
-      import("https://esm.sh/@elevenlabs/client@1.12.1").then(function (mod) {
-        return mod.Conversation.startSession({
-          conversationToken: conversationToken, connectionType: "webrtc",
-          onConnect: function () { show("live"); startTimer(); },
-          onDisconnect: function () { stopTimer(); show("cta"); },
-          onError: function () { stopTimer(); fail("generr"); }
-        });
-      }).then(function (c) { conv = c; }).catch(function (e) {
-        var denied = ("" + e).toLowerCase().match(/permission|denied|notallowed|microphone|getusermedia/);
-        fail(denied ? "micdenied" : "generr");
-      });
-    }
-
-    function startTimer() {
-      elapsed = 0; wrapSent = false; bind("count", DEMO_SECONDS);
-      timerInt = setInterval(function () {
-        elapsed++;
-        var left = Math.max(0, DEMO_SECONDS - elapsed); bind("count", left);
-        if (elapsed >= WRAP_AT && !wrapSent && conv) { wrapSent = true;
-          try { conv.sendContextualUpdate("[WRAP_UP] El tiempo de la demo casi termina. Cierra YA con tu remate: di que esto fue solo una prueba y que para verlo en su negocio agende una llamada para su prueba gratis. Hazlo en el idioma que la persona ha estado usando, breve y cálido."); } catch (e) {}
-        }
-        if (elapsed >= HARD_STOP) { endNow(); }
-      }, 1000);
-    }
-    function stopTimer() { if (timerInt) { clearInterval(timerInt); timerInt = null; } }
-    function endNow() { stopTimer(); try { if (conv) conv.endSession(); } catch (e) {} }
-
-    root.addEventListener("click", function (e) {
-      var hit = e.target.closest("[data-act]");
-      var act = hit ? hit.dataset.act : null;
-      if (!act) return;
-      if (act === "accept") { renderTurnstile(function (token) { gatekeep(token); }); }
-      if (act === "end") { endNow(); }
-      if (act === "retry") { if (tsWidgetId != null && window.turnstile) { window.turnstile.reset(tsWidgetId); } show("consent"); }
-    });
-
-    show("consent");
+    root.querySelectorAll('[data-act="book"]').forEach(function (a) { if (a.tagName === "A") { a.href = BOOKING + "?lang=" + LANG; if (!a.textContent.trim()) a.textContent = t.book; } });
+    var cta = root.querySelector('[data-view="cta"] [data-act="book"]'); if (cta) cta.textContent = t.book;
+    var lim = root.querySelector('[data-view="limit"] [data-act="book"]'); if (lim) lim.textContent = t.book;
   }
 
-  // --- localiza el host #vbc-demo; si el popup carga tarde, lo espera ---
+  // Puebla una instancia #vbc-demo VACÍA. Salta las ya pobladas (incluye clones de Elementor,
+  // que llegan ya con .vbc-card) → evita re-mutar el DOM y disparar al observer en bucle.
+  function mount(root) {
+    if (root.querySelector(".vbc-card")) return;
+    root.innerHTML = HTML;
+    fillI18n(root);
+    show(root, "consent");
+  }
+
+  // --- estado de sesión (una demo activa a la vez) ---
+  var conv = null, tsWidgetId = null, timerInt = null, elapsed = 0, wrapSent = false;
+
+  function renderTurnstile(root, onToken) {
+    var mountEl = root.querySelector(".vbc-turnstile");
+    if (!mountEl) return fail(root, "generr");
+    mountEl.innerHTML = "";
+    var go = function () {
+      try {
+        tsWidgetId = window.turnstile.render(mountEl, {
+          sitekey: SITEKEY, callback: onToken,
+          "error-callback": function () { fail(root, "captcha"); },
+          "expired-callback": function () { if (tsWidgetId != null) window.turnstile.reset(tsWidgetId); }
+        });
+      } catch (e) { fail(root, "generr"); }
+    };
+    if (window.turnstile && window.turnstile.render) { go(); }
+    else { var iv = setInterval(function () { if (window.turnstile && window.turnstile.render) { clearInterval(iv); go(); } }, 120); }
+  }
+
+  function gatekeep(root, token) {
+    show(root, "connecting");
+    fetch(GATEKEEPER, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ turnstileToken: token }) })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || data.allowed !== true) {
+          if (data && data.reason === "limit") { bind(root, "limitMsg", data.message || t.cta_sub); return show(root, "limit"); }
+          return fail(root, data && data.reason === "captcha" ? "captcha" : "generr");
+        }
+        startVoice(root, data.token);
+      })
+      .catch(function () { fail(root, "generr"); });
+  }
+
+  function startVoice(root, conversationToken) {
+    import("https://esm.sh/@elevenlabs/client@1.12.1").then(function (mod) {
+      return mod.Conversation.startSession({
+        conversationToken: conversationToken, connectionType: "webrtc",
+        onConnect: function () { show(root, "live"); startTimer(root); },
+        onDisconnect: function () { stopTimer(); show(root, "cta"); },
+        onError: function () { stopTimer(); fail(root, "generr"); }
+      });
+    }).then(function (c) { conv = c; }).catch(function (e) {
+      var denied = ("" + e).toLowerCase().match(/permission|denied|notallowed|microphone|getusermedia/);
+      fail(root, denied ? "micdenied" : "generr");
+    });
+  }
+
+  function startTimer(root) {
+    elapsed = 0; wrapSent = false; bind(root, "count", DEMO_SECONDS);
+    timerInt = setInterval(function () {
+      elapsed++;
+      bind(root, "count", Math.max(0, DEMO_SECONDS - elapsed));
+      if (elapsed >= WRAP_AT && !wrapSent && conv) { wrapSent = true;
+        try { conv.sendContextualUpdate("[WRAP_UP] El tiempo de la demo casi termina. Cierra YA con tu remate: di que esto fue solo una prueba y que para verlo en su negocio agende una llamada para su prueba gratis. Hazlo en el idioma que la persona ha estado usando, breve y cálido."); } catch (e) {}
+      }
+      if (elapsed >= HARD_STOP) { endNow(); }
+    }, 1000);
+  }
+  function stopTimer() { if (timerInt) { clearInterval(timerInt); timerInt = null; } }
+  function endNow() { stopTimer(); try { if (conv) conv.endSession(); } catch (e) {} }
+
+  // --- delegación de clics en DOCUMENT: sobrevive a clonado/movimiento de Elementor ---
+  document.addEventListener("click", function (e) {
+    var hit = e.target.closest("[data-act]");
+    if (!hit) return;
+    var root = hit.closest("#vbc-demo");
+    if (!root) return;
+    if (!root.querySelector(".vbc-card")) mount(root);   // por si el clon llega vacío
+    var act = hit.dataset.act;
+    if (act === "accept") { renderTurnstile(root, function (token) { gatekeep(root, token); }); }
+    else if (act === "end") { endNow(); }
+    else if (act === "retry") { if (tsWidgetId != null && window.turnstile) { window.turnstile.reset(tsWidgetId); } show(root, "consent"); }
+    // data-act="book" son <a href> → navegación natural (href ya lo pone fillI18n)
+  });
+
+  // --- montar cualquier instancia #vbc-demo presente o que Elementor inyecte luego ---
+  function scanAndMount() {
+    var list = document.querySelectorAll("#vbc-demo");
+    for (var i = 0; i < list.length; i++) { mount(list[i]); }
+  }
   function boot() {
-    var existing = document.getElementById("vbc-demo");
-    if (existing) return start(existing);
-    var mo = new MutationObserver(function () {
-      var el = document.getElementById("vbc-demo");
-      if (el) { mo.disconnect(); start(el); }
+    injectCSS(); loadTurnstile();
+    scanAndMount();
+    // Solo reacciona cuando se AGREGA un #vbc-demo nuevo (popup inyectado/clonado por Elementor);
+    // ignora las mutaciones internas de nuestro propio montaje → sin bucles.
+    var mo = new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        var added = muts[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          var n = added[j];
+          if (n.nodeType === 1 && (n.id === "vbc-demo" || (n.querySelector && n.querySelector("#vbc-demo")))) { scanAndMount(); return; }
+        }
+      }
     });
     mo.observe(document.documentElement, { childList: true, subtree: true });
   }
-
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 })();
