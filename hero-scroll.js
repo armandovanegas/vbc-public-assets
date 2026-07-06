@@ -26,7 +26,7 @@
   } catch (e) {}
 
   // ============================================================
-  // === Hero scroll animation — v13 (4K, two-mode, preloaded) ===
+  // === Hero scroll animation — v14 (4K, two-mode, preloaded, orientation-aware) ===
   // Rebuild 2026-06-12: idle (alive, blink + floating cables, ping-pong)
   // + scroll arc (face up → camera travels cables → converge to light).
   // All frames preloaded (no fetch-on-scroll). Progressive: preview tier
@@ -40,7 +40,14 @@
   var BASE = window.__HERO_BASE__ || "https://armandovanegas.github.io/vbc-public-assets/frames-4k";
   var ARCO_N = 241;          // arc frames (frame_0001..0241)
   var IDLE_N = 80;           // idle frames (frame_0001..0080)
-  var FRAME_W = 3840, FRAME_H = 2160;
+
+  // Orientation-aware asset set (v14): landscape keeps the 16:9 master
+  // (arco/idle dirs); portrait phones/tablets get a dedicated 9:16
+  // composition (arco-v/idle-v dirs) so "cover" never crops the subject.
+  var PORTRAIT = false;
+  try { PORTRAIT = (window.innerHeight || 0) > (window.innerWidth || 0); } catch (e) {}
+  var FRAME_W = PORTRAIT ? 1755 : 3840;   // 1755x3120 = pixel-perfect cover
+  var FRAME_H = PORTRAIT ? 3120 : 2160;   // on the sharpest phone (S25U QHD+)
   var ASPECT = FRAME_W / FRAME_H;
 
   var IDLE_FPS = 24;                 // real-time idle playback
@@ -64,8 +71,10 @@
   var prev = { arco: new Array(ARCO_N + 1), idle: new Array(IDLE_N + 1) };
   var full = { arco: new Array(ARCO_N + 1), idle: new Array(IDLE_N + 1) };
 
-  // desktop (3840) vs mobile (1440) full tier; preview always 960
+  // landscape: desktop (3840) vs mobile (1440) full tier; preview always 960.
+  // portrait: single full tier (1440x2560) in arco-v/idle-v; preview -v-p.
   function fullSuffix() {
+    if (PORTRAIT) return '';          // ''=/arco-v//idle-v/ (single tier)
     var dpr = window.devicePixelRatio || 1;
     var phys = (window.innerWidth || 1280) * dpr;
     return phys > 1500 ? '' : '-m';   // ''=/arco//idle/ (4k) ; '-m'=mobile
@@ -73,7 +82,8 @@
   var FULL_SUF = fullSuffix();
 
   function pad(n) { return ('000' + n).slice(-4); }
-  function url(clip, suf, i) { return BASE + '/' + clip + suf + '/frame_' + pad(i) + '.webp'; }
+  function dirFor(clip) { return PORTRAIT ? clip + '-v' : clip; }
+  function url(clip, suf, i) { return BASE + '/' + dirFor(clip) + suf + '/frame_' + pad(i) + '.webp'; }
 
   function loadImg(src) {
     return new Promise(function(resolve) {
@@ -225,7 +235,13 @@
 
   // scroll/resize wake the loop
   function onScroll() { ensureRunning(); }
-  function onResize() { sizeCanvas(); ensureRunning(); }
+  function onResize() {
+    // orientation flip → the other asset set applies; reload once to swap
+    var p = false;
+    try { p = (window.innerHeight || 0) > (window.innerWidth || 0); } catch (e) {}
+    if (p !== PORTRAIT) { try { location.reload(); return; } catch (e) {} }
+    sizeCanvas(); ensureRunning();
+  }
 
   // ---- progressive loading ----
   var loader = null;
