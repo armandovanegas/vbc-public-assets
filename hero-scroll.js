@@ -38,14 +38,18 @@
   // ============================================================
 
   var BASE = window.__HERO_BASE__ || "https://armandovanegas.github.io/vbc-public-assets/frames-4k";
-  var ARCO_N = 241;          // arc frames (frame_0001..0241)
-  var IDLE_N = 80;           // idle frames (frame_0001..0080)
 
-  // Orientation-aware asset set (v14): landscape keeps the 16:9 master
-  // (arco/idle dirs); portrait phones/tablets get a dedicated 9:16
-  // composition (arco-v/idle-v dirs) so "cover" never crops the subject.
+  // Orientation-aware asset set (v15): landscape keeps the 16:9 master
+  // (arco/idle dirs, 241/80 frames, ping-pong idle); portrait phones/tablets
+  // get a dedicated 9:16 composition (arco-v/idle-v dirs) so "cover" never
+  // crops the subject. The portrait idle is anchored master→master (start=end)
+  // with a baked crossfade seam, so it forward-loops (1..N..1); the portrait
+  // arc ends on a pure-black fade for a clean handoff to the content below.
   var PORTRAIT = false;
   try { PORTRAIT = (window.innerHeight || 0) > (window.innerWidth || 0); } catch (e) {}
+
+  var ARCO_N = PORTRAIT ? 153 : 241;   // arc frames (frame_0001..N)
+  var IDLE_N = PORTRAIT ? 97 : 80;     // idle frames (frame_0001..N)
   var FRAME_W = PORTRAIT ? 1755 : 3840;   // 1755x3120 = pixel-perfect cover
   var FRAME_H = PORTRAIT ? 3120 : 2160;   // on the sharpest phone (S25U QHD+)
   var ASPECT = FRAME_W / FRAME_H;
@@ -161,7 +165,13 @@
   var needsDraw = true;
 
   function idleIndexAt(now) {
-    // ping-pong: 1..IDLE_N..2  (seamless, no jump)
+    if (PORTRAIT) {
+      // forward loop: 1..IDLE_N..1 — frames are anchored master→master with a
+      // baked crossfade seam, so straight forward playback loops seamlessly.
+      var stepF = Math.floor((now - idleStartT) / IDLE_DT) % IDLE_N;
+      return stepF + 1;                     // 1..IDLE_N
+    }
+    // landscape ping-pong: 1..IDLE_N..2  (seamless, no jump)
     var period = IDLE_N * 2 - 2;            // 158 for 80
     var step = Math.floor((now - idleStartT) / IDLE_DT) % period;
     var idx = step < IDLE_N ? step : (period - step); // 0..N-1..1
